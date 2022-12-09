@@ -48,10 +48,7 @@ export async function getDataFiles(idFile) {
         }),
     ])
     if(get_data_file.ok && get_methods.ok){
-        //let data1 = await get_data_file.json()
-        //let data2 = await get_methods.json()
-        //console.log(data1)
-        //console.log(data2)
+
         return {
             data_file: await get_data_file.json(),
             methods: await get_methods.json()
