@@ -5,7 +5,7 @@
     import Swal from "sweetalert2";
 
     let dict_cols_to_check = {};
-    let dict_methods_to_add = {};
+    let colSelect;
     let colName = "";
     let showLstMethods = false;
     $: hideMethods = showLstMethods == false? 'visually-hidden':'';
@@ -13,14 +13,11 @@
     $: hideButtons = showButtonsConfigGlobals == false? 'visually-hidden':'';
     let table_html = null;
     $: table_html_Await = table_html == null? "" : addListenerTable(table_html);
-
-    $: disableBtn = Object.keys(dict_methods_to_add).length === 0 ? true:false;
-
     let data_file_config_promise = get_data();
     let dataFileId = "";
 
     data_file_config_promise.then(val => { dataFileId = val?.data_file.id})
-
+    
     function get_data(){
         if($page.params.id_config == "null"){
             return getDataFiles($page.params.id_file)
@@ -31,14 +28,32 @@
     }
 
     function addListenerTable(table_html){
+        if($page.params.id_config != "null"){addConfigToTable()}
+
         const lst_th = Array.from(table_html.querySelectorAll("th"));
         lst_th.forEach(th => {
             th.addEventListener('click', event => showAndAddMethods(th, lst_th, table_html));
         });
     }
 
+    function addConfigToTable(){
+
+        data_file_config_promise.then(data => {
+            const config = data.config.config_dict;
+            dict_cols_to_check = config;
+
+            for(const [key, value] of Object.entries(config)){
+                var xpath = "//th[text()='"+key+"']";
+                var colWithConfig = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                console.log(colWithConfig)
+                colWithConfig.setAttribute("class", "bg-primary");
+            }
+        })    
+    }
+
     function showAndAddMethods(th, lst_th, table_html){
         showButtonsConfigGlobals = !showButtonsConfigGlobals;
+        colSelect = th;
         colName = th.innerText;
         const th_index = lst_th.indexOf(th);
         lst_th.forEach(th => {lst_th.indexOf(th) != th_index? th.classList.add("visually-hidden"): ""})
@@ -47,11 +62,33 @@
             let lst_td = Array.from(tr.querySelectorAll("td"))
             lst_td.forEach(td => {lst_td.indexOf(td) != th_index? td.classList.add("visually-hidden"): ""})
         });
+
+        if(colName in dict_cols_to_check){
+            const dict_to_check = dict_cols_to_check[colName];
+            for(const [key, value] of Object.entries(dict_to_check)){
+                document.querySelector("#div-methods input[id="+key+"]").checked = true
+            }
+        }
         showLstMethods = !showLstMethods;
     }
 
     function registerConfigOnCol(){
-        dict_methods_to_add= {}
+        const lstInputChecked = Array.from(document.querySelectorAll("#div-methods input:checked"));
+
+        if(lstInputChecked.length != 0){
+            let method_dict = {};
+            lstInputChecked.forEach(input => {
+                method_dict[input.getAttribute('id')]=input.getAttribute('data-args');
+                input.setAttribute('data-args', "");
+            })
+            dict_cols_to_check[colName] = method_dict;
+            colSelect.setAttribute("class", "bg-primary");
+        }
+        else{
+            delete dict_cols_to_check[colName];
+            colSelect.classList.remove("bg-primary");
+        }
+        
         console.log(dict_cols_to_check)
         showTable();
     }
@@ -63,23 +100,47 @@
         showLstMethods = !showLstMethods;
     }
 
-    function cancelAddMethod(){
-        showTable();
-        delete dict_cols_to_check[colName]
-    }
-
-    function addMethod(method_name){
-        dict_methods_to_add[method_name] = "";
-        dict_cols_to_check[colName] = dict_methods_to_add;
+    function addArgs(el, need_args){
+        console.log(el)
+        if(need_args){
+            Swal.fire({
+                title: 'Arguments de méthode :',
+                html:
+                '<div class="input-group d-flex justify-content-center">'+
+                '<input class="form-control" type="text" id="input-arg">'+
+                '</div>',
+                showCancelButton: true,
+                showConfirmButton: true,
+              }).then((result) => {
+                console.log(result)
+                if (result.isConfirmed) {
+                    el.setAttribute('data-args', document.querySelector("#input-arg").value)
+                } 
+            })
+        }
     }
 
     const postConfig = async () =>{
-        const config = {
-            id_file : dataFileId,
-            config : dict_cols_to_check
+        let config;
+        let method;
+
+        if($page.params.id_config == "null"){
+            config = {
+                id_file : dataFileId,
+                config : dict_cols_to_check
+            };
+            method = "POST";
         }
+        else{
+            config = {
+                id_config : $page.params.id_config,
+                config : dict_cols_to_check
+            };
+            method = "PATCH";
+        }
+      
         const res = await fetch(public_env.PUBLIC_URL_API+'config/config',{
-            method: 'POST',
+            method: method,
             body: JSON.stringify(config),
             headers:{
                 "Content-type":"application/json; charset=UTF-8",
@@ -89,8 +150,7 @@
         );
         if(res.ok){
             let data = await res.json();
-            console.log(data)
-            return data;
+            Swal.fire(data.message)
         }	
         throw 'Erreur lors du transfert des datas.';
     }
@@ -110,7 +170,6 @@
 </style>
 
 <h1>Manip CSV :</h1>
-
 {#await data_file_config_promise}
 <h2>Loading...</h2>
 {:then dataFile}
@@ -136,13 +195,14 @@
         <div class="mb-3">
         {#each dataFile?.methods as method}
           <div>
-            <input id="{method.id}" type="checkbox" on:click={() => addMethod(method.method_name)}>
-            <label for="{method.id}">{method.public_name}</label>
+            <input id="{method.method_name}" data-args="" type="checkbox" on:click={(el) => addArgs(el.target, method.need_args)}>
+            <label for="{method.method_name}">{method.public_name}</label>
           </div>
         {/each}
         </div>
-        <button class="btn btn-primary" disabled={disableBtn} on:click={registerConfigOnCol}>enregistrer</button>
-        <button class="btn btn-danger" on:click={cancelAddMethod}>annuler</button>
+
+        <button class="btn btn-primary"  on:click={registerConfigOnCol}>enregistrer</button>
+        <button class="btn btn-danger" on:click={showTable}>annuler</button>
     </div>
 </div>
 
