@@ -24,17 +24,24 @@
         let formdata = new FormData(form);
         let id_file = formdata.get("data-file");
         let id_config = formdata.get("config-file");
-        goto("/controls/"+id_file+"/"+id_config);
+
+        if(id_config == null){
+            goto("/controls/"+id_file);
+        }
+        else{
+            goto("/controls/"+id_file+"/"+id_config);
+        }
     }
 
     const sendNewFile = async () => {
         const form = document.getElementById('form_new_file');
         let formdata = new FormData(form);
 
-        let r = await fetch(public_env.PUBLIC_URL_API+'data_file/data_file', {method: "POST", body: formdata});
-
-        let data = await r.json();
-        console.log(data)
+        let r = await fetch(public_env.PUBLIC_URL_API+'data_file/data_file', {method: "POST", body: formdata, 
+            headers:{
+                "Accept":"application/json"
+            }
+        });
 
         if(r.ok === true){
             form.reset();
