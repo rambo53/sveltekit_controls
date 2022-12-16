@@ -4,6 +4,7 @@
 	const dispatch = createEventDispatcher();
 
     export let lstMethods;
+    let separator = "##";
 
 
     function removeCheckedInput(cancel){
@@ -12,21 +13,30 @@
     }
 
     function addArgs(el, need_args){
-        console.log(el)
         if(need_args){
             Swal.fire({
                 title: 'Arguments de méthode :',
-                html:
-                '<div class="input-group d-flex justify-content-center">'+
-                '<input class="form-control" type="text" id="input-arg">'+
-                '</div>',
+                input: 'text',
                 showCancelButton: true,
                 showConfirmButton: true,
+                allowOutsideClick: false,
+                preConfirm: (args) =>{
+                    try {
+                        if(args.trim() == ""){throw new Error("Vous devez renseigner au moins un argument.")}
+                        if(args.includes(separator)){
+                            args = args.split(separator)
+                        }
+                        el.setAttribute('data-args', args)
+                    } catch (error) {
+                        Swal.showValidationMessage(
+                            `${error}`
+                        )
+                    }    
+                }
               }).then((result) => {
-                console.log(result)
-                if (result.isConfirmed) {
-                    el.setAttribute('data-args', document.querySelector("#input-arg").value)
-                } 
+                if(result.isDismissed){
+                    el.checked = false;
+                }
             })
         }
     }
