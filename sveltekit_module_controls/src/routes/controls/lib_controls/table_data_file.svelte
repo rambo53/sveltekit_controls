@@ -1,4 +1,5 @@
 <script>
+	import { goto } from '$app/navigation';
     import { env as public_env} from '$env/dynamic/public';
     import Swal from "sweetalert2";
     import LstMethods from '../lib_controls/lst_methods.svelte';
@@ -16,7 +17,8 @@
     let showButtonsConfigGlobals = true;
     $: hideButtons = showButtonsConfigGlobals == false? 'visually-hidden':'';
 
-    function addListenerTable(table_html){
+
+    const addListenerTable = async (table_html) => {
         if(!newConfig){addConfigToTable()}
 
         const lst_th = Array.from(table_html.querySelectorAll("th"));
@@ -25,7 +27,7 @@
         });
     }
 
-    function addConfigToTable(){
+    const addConfigToTable = async () => {
         dict_cols_to_check = dataFile?.data_file.config.config_dict;
 
         for(const [key, value] of Object.entries(dict_cols_to_check)){
@@ -35,7 +37,7 @@
         }
     }
 
-    function showAndAddMethods(th, lst_th, table_html){
+    const showAndAddMethods = async (th, lst_th, table_html) => {
         showButtonsConfigGlobals = !showButtonsConfigGlobals;
         colSelect = th;
         colName = th.innerText;
@@ -56,44 +58,62 @@
         showLstMethods = !showLstMethods;
     }
 
-    function formatConfig(){
-        let method;
-        let config;
+    function configOk(){
+        if(Object.keys(dict_cols_to_check).length == 0){
+            Swal.fire("Vous devez renseigner une configuration d'abord.")
+            return false;
+        }
+        return true
+    }
 
-        if(newConfig){
-            Swal.fire({
-                title: 'Nom de la config :',
-                html:
-                '<input id="configName" type="text">',
-                showCancelButton: true,
-                confirmButtonText: 'ok',
-            })
-            .then((result) => {
-            let name = document.querySelector("#configName").value;
-            if (result.isConfirmed) { 
+    const formatConfig = async () => {
+
+        if(configOk()){
+        
+            let method;
+            let config;
+            let endpoint;
+
+            if(newConfig){
+                Swal.fire({
+                    title: 'Nom de la config :',
+                    input: 'text',
+                    showCancelButton: true,
+                    confirmButtonText: 'ok',
+                    preConfirm: (args) =>{
+                    try {
+                        if(args.trim() == ""){throw new Error("Le nom de la configuration ne peut pas être vide.")}
+                        config = {
+                            name : args,
+                            id_file : dataFile?.data_file.id,
+                            config : dict_cols_to_check
+                        };
+                        method = "POST";
+                        endpoint = "new_config"
+                        postConfig(config, method,endpoint)
+                    } catch (error) {
+                        Swal.showValidationMessage(
+                            `${error}`
+                        )
+                    }    
+                }
+                })
+            }
+            else{
                 config = {
-                    name : name,
-                    id_file : dataFile?.data_file.id,
+                    id_config : dataFile?.data_file.config.id,
                     config : dict_cols_to_check
                 };
-                method = "POST";
-                postConfig(config, method)
+                method = "PATCH";
+                endpoint = "update_config"
+                postConfig(config, method,endpoint)
             }
-          })
-        }
-        else{
-            config = {
-                id_config : dataFile?.data_file.config.id,
-                config : dict_cols_to_check
-            };
-            method = "PATCH";
-            postConfig(config, method)
         }
     }
 
-    function postConfig(config, method){
+    const postConfig = async (config, method, endpoint) => {
 
-        fetch(public_env.PUBLIC_URL_API+'config/config',{
+        fetch(public_env.PUBLIC_URL_API+'config/'+endpoint,{
             method: method,
             body: JSON.stringify(config),
             headers:{
@@ -113,13 +133,47 @@
     }
     
 
-    function launchControls(){
-        Swal.fire('A faire, voir si enregistrement en même temps ou juste lancement controles')
+    const launchControls = async () => {
+        if(configOk()){
+            let data_config = {
+                name:dataFile?.data_file.name,
+                controls_dict:dict_cols_to_check
+            }
+            fetch(public_env.PUBLIC_URL_API+'error_file/launch_controls',{
+                method: 'POST',
+                body: JSON.stringify(data_config),
+                headers:{
+                    "Content-type":"application/json; charset=UTF-8",
+                    "Accept":"application/json"
+                    }
+                }
+            )
+            .then(function (response) {
+                return response.json()
+            })
+            .then(function (data) {
+                if(data.status == 200){
+                    Swal.fire({
+                        title: data.message,
+                        showDenyButton: true,
+                        showCancelButton: true,
+                        confirmButtonText: 'Voir les erreurs',
+                        denyButtonText: `Retourner à l'acceuil`,
+                    }).then((result) =>{
+                        if(result.isConfirmed){
+                            goto("/controls/error_file/"+data.name_file_error)
+                        }
+                        else if(result.isDenied){
+                            goto("/")
+                        }
+                    })
+                }
+            })
+        }
     }
 
-    function changeDictValue(event){
-        console.log(event.detail)
-
+    const changeDictValue = async (event) => {
+        
         if(Object.keys(event.detail).length != 0){
             dict_cols_to_check[colName] = event.detail;
             colSelect.setAttribute("class", "bg-primary");
@@ -130,10 +184,9 @@
         }
 
         showTable();
-        console.log(dict_cols_to_check)
     }
 
-    function showTable(){
+    const showTable = async () =>  {
         Array.from(table_html.querySelectorAll("table .visually-hidden")).forEach(el => el.classList.remove("visually-hidden"));
         showButtonsConfigGlobals = !showButtonsConfigGlobals;
         showLstMethods = !showLstMethods;
